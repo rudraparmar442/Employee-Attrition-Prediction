@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Employee Attrition Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          sans-serif; background: #0f1117; color: #e0e0e0; }
+  .header { background: linear-gradient(135deg, #0C447C, #185FA5);
+             padding: 2rem; text-align: center; }
+  .header h1 { font-size: 2rem; color: white; font-weight: 600; }
+  .header p  { color: #B5D4F4; margin-top: 0.5rem; font-size: 1rem; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr);
+               gap: 1rem; margin-bottom: 2rem; }
+  .kpi { background: #1a1f2e; border-radius: 12px; padding: 1.5rem;
+          border: 1px solid #2a3040; text-align: center; }
+  .kpi-value { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .kpi-label { font-size: 0.85rem; color: #888; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr;
+            gap: 1.5rem; margin-bottom: 1.5rem; }
+  .card { background: #1a1f2e; border-radius: 12px; padding: 1.5rem;
+           border: 1px solid #2a3040; }
+  .card h3 { font-size: 1rem; color: #B5D4F4; margin-bottom: 1rem;
+              font-weight: 500; }
+  canvas { max-height: 280px; }
+  .risk-tool { background: #1a1f2e; border-radius: 12px;
+                padding: 1.5rem; margin-bottom: 1.5rem;
+                border: 1px solid #2a3040; }
+  .risk-tool h3 { font-size: 1.1rem; color: #B5D4F4;
+                   margin-bottom: 1.25rem; font-weight: 500; }
+  .input-grid { display: grid; grid-template-columns: repeat(3, 1fr);
+                 gap: 1rem; margin-bottom: 1.25rem; }
+  .input-group label { font-size: 0.8rem; color: #888;
+                        display: block; margin-bottom: 4px; }
+  .input-group input, .input-group select {
+    width: 100%; background: #0f1117; border: 1px solid #2a3040;
+    border-radius: 6px; padding: 8px 10px; color: #e0e0e0;
+    font-size: 0.9rem; }
+  .predict-btn { background: #378ADD; color: white; border: none;
+    padding: 12px 32px; border-radius: 8px; font-size: 1rem;
+    cursor: pointer; font-weight: 500; display: block;
+    margin: 0 auto; }
+  .predict-btn:hover { background: #185FA5; }
+  .result-box { margin-top: 1.25rem; padding: 1.25rem;
+    border-radius: 8px; text-align: center; display: none; }
+  .result-box h2 { font-size: 1.5rem; font-weight: 700; }
+  .result-box p  { margin-top: 0.5rem; font-size: 0.95rem; }
+  .actions { margin-top: 1rem; text-align: left; }
+  .action-item { padding: 8px 12px; border-radius: 6px;
+    margin: 6px 0; font-size: 0.9rem; }
+  .footer { text-align: center; padding: 2rem;
+             color: #555; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>👥 Employee Attrition Intelligence Dashboard</h1>
+  <p>XGBoost model · ROC-AUC 0.777 · Recall 0.68 · IBM HR Analytics Dataset</p>
+</div>
+
+<div class="container">
+
+  <!-- KPI cards -->
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-value" style="color:#D85A30">390</div>
+      <div class="kpi-label">Employees at risk</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-value" style="color:#EF9F27">26.5%</div>
+      <div class="kpi-label">At-risk rate</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-value" style="color:#378ADD">$30.8M</div>
+      <div class="kpi-label">Total replacement exposure</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-value" style="color:#5DCAA5">0.777</div>
+      <div class="kpi-label">Model ROC-AUC</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <!-- Attrition by department -->
+    <div class="card">
+      <h3>Attrition rate by department</h3>
+      <canvas id="deptChart"></canvas>
+    </div>
+
+    <!-- Cost exposure -->
+    <div class="card">
+      <h3>Replacement cost exposure by department ($)</h3>
+      <canvas id="costChart"></canvas>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <!-- SHAP importance -->
+    <div class="card">
+      <h3>Top 10 attrition drivers — SHAP importance</h3>
+      <canvas id="shapChart"></canvas>
+    </div>
+
+    <!-- Model comparison -->
+    <div class="card">
+      <h3>Model comparison — ROC-AUC</h3>
+      <canvas id="modelChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Risk calculator -->
+  <div class="risk-tool">
+    <h3>🔍 Individual employee risk calculator</h3>
+    <div class="input-grid">
+      <div class="input-group">
+        <label>Monthly income ($)</label>
+        <input type="number" id="income" value="5000" min="1000" max="20000">
+      </div>
+      <div class="input-group">
+        <label>Age</label>
+        <input type="number" id="age" value="35" min="18" max="60">
+      </div>
+      <div class="input-group">
+        <label>Years at company</label>
+        <input type="number" id="tenure" value="5" min="0" max="40">
+      </div>
+      <div class="input-group">
+        <label>Overtime</label>
+        <select id="overtime">
+          <option value="0">No</option>
+          <option value="1">Yes</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label>Job satisfaction (1–4)</label>
+        <select id="satisfaction">
+          <option value="1">1 — Low</option>
+          <option value="2">2 — Medium</option>
+          <option value="3" selected>3 — High</option>
+          <option value="4">4 — Very High</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label>Work-life balance (1–4)</label>
+        <select id="worklife">
+          <option value="1">1 — Bad</option>
+          <option value="2">2 — Good</option>
+          <option value="3" selected>3 — Better</option>
+          <option value="4">4 — Best</option>
+        </select>
+      </div>
+    </div>
+    <button class="predict-btn" onclick="predictRisk()">
+      Calculate attrition risk
+    </button>
+    <div class="result-box" id="resultBox">
+      <h2 id="resultLabel"></h2>
+      <p  id="resultDetail"></p>
+      <div class="actions" id="actionList"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  Model: XGBoost | Threshold: 0.32 | Dataset: IBM HR Analytics (n=1,470)
+  | Built for portfolio demonstration
+</div>
+
+<script>
+// ── Chart 1: Attrition by department ──
+new Chart(document.getElementById('deptChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Sales', 'Human Resources', 'R&D'],
+    datasets: [{ label: 'Attrition rate (%)',
+      data: [20.6, 19.0, 13.8],
+      backgroundColor: ['#D85A30','#EF9F27','#378ADD'],
+      borderRadius: 6 }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { grid: { color: '#2a3040' },
+            ticks: { color: '#888' },
+            title: { display: true, text: '%', color: '#888' } },
+      x: { grid: { color: '#2a3040' }, ticks: { color: '#888' } }
+    }
+  }
+});
+
+// ── Chart 2: Cost exposure ──
+new Chart(document.getElementById('costChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Sales', 'R&D', 'Human Resources'],
+    datasets: [{ label: 'Exposure ($)',
+      data: [15098022, 14588334, 1159524],
+      backgroundColor: ['#D85A30','#378ADD','#EF9F27'],
+      borderRadius: 6 }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { grid: { color: '#2a3040' }, ticks: { color: '#888',
+            callback: v => '$' + (v/1e6).toFixed(1) + 'M' } },
+      x: { grid: { color: '#2a3040' }, ticks: { color: '#888' } }
+    }
+  }
+});
+
+// ── Chart 3: SHAP importance ──
+const shapFeatures = ["OverTime", "StockOptionLevel", "CompRatio", "NumCompaniesWorked", "Age", "SatisfactionScore", "JobRole", "DistanceFromHome", "DailyRate", "YearsWithCurrManager"];
+const shapValues   = [0.6211000084877014, 0.4255000054836273, 0.34459999203681946, 0.33340001106262207, 0.3285999894142151, 0.30820000171661377, 0.30730000138282776, 0.2897000014781952, 0.27799999713897705, 0.26010000705718994];
+new Chart(document.getElementById('shapChart'), {
+  type: 'bar',
+  data: {
+    labels: shapFeatures.slice().reverse(),
+    datasets: [{ label: 'Mean |SHAP|',
+      data: shapValues.slice().reverse(),
+      backgroundColor: '#378ADD', borderRadius: 4 }]
+  },
+  options: {
+    indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: '#2a3040' }, ticks: { color: '#888' } },
+      y: { grid: { color: '#2a3040' }, ticks: { color: '#888',
+            font: { size: 11 } } }
+    }
+  }
+});
+
+// ── Chart 4: Model comparison ──
+new Chart(document.getElementById('modelChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Logistic Regression', 'Random Forest',
+             'XGBoost (default)', 'XGBoost (tuned)'],
+    datasets: [{ label: 'ROC-AUC',
+      data: [0.767, 0.722, 0.741, 0.777],
+      backgroundColor: ['#888780','#5DCAA5','#EF9F27','#378ADD'],
+      borderRadius: 6 }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { min: 0.6, max: 0.85, grid: { color: '#2a3040' },
+            ticks: { color: '#888' } },
+      x: { grid: { color: '#2a3040' },
+            ticks: { color: '#888', font: { size: 10 } } }
+    }
+  }
+});
+
+// ── Risk calculator ──
+function predictRisk() {
+  const income       = parseFloat(document.getElementById('income').value);
+  const age          = parseFloat(document.getElementById('age').value);
+  const tenure       = parseFloat(document.getElementById('tenure').value);
+  const overtime     = parseInt(document.getElementById('overtime').value);
+  const satisfaction = parseInt(document.getElementById('satisfaction').value);
+  const worklife     = parseInt(document.getElementById('worklife').value);
+
+  // Heuristic risk score based on top SHAP drivers
+  let risk = 0.10;
+  if (overtime === 1)       risk += 0.22;
+  if (income < 3000)        risk += 0.18;
+  if (income < 5000)        risk += 0.08;
+  if (age < 30)             risk += 0.10;
+  if (tenure < 2)           risk += 0.12;
+  if (satisfaction <= 2)    risk += 0.14;
+  if (worklife <= 2)        risk += 0.08;
+  if (tenure > 10)          risk -= 0.08;
+  if (income > 10000)       risk -= 0.10;
+  if (satisfaction >= 4)    risk -= 0.08;
+  risk = Math.min(Math.max(risk, 0.03), 0.97);
+
+  const isHighRisk = risk >= 0.32;
+  const annualSalary = income * 12;
+  const replacementCost = (annualSalary * 1.5).toLocaleString('en-US',
+    {style:'currency', currency:'USD', maximumFractionDigits: 0});
+
+  const box = document.getElementById('resultBox');
+  box.style.display = 'block';
+  box.style.background = isHighRisk ? '#3D1A0F' : '#0F2D1F';
+  box.style.border = '1px solid ' + (isHighRisk ? '#D85A30' : '#5DCAA5');
+
+  document.getElementById('resultLabel').textContent =
+    (isHighRisk ? '⚠️ HIGH RISK — ' : '✅ LOW RISK — ') +
+    (risk * 100).toFixed(0) + '% attrition probability';
+  document.getElementById('resultLabel').style.color =
+    isHighRisk ? '#D85A30' : '#5DCAA5';
+
+  document.getElementById('resultDetail').textContent =
+    'Estimated replacement cost: ' + replacementCost +
+    ' | Expected cost: ' + (annualSalary * 1.5 * risk).toLocaleString(
+    'en-US', {style:'currency',currency:'USD',maximumFractionDigits:0});
+
+  const actions = [];
+  if (overtime === 1)    actions.push('🔴 Review overtime — highest attrition driver');
+  if (satisfaction <= 2) actions.push('🔴 Schedule career development conversation');
+  if (income < 4000)     actions.push('🟡 Benchmark compensation vs department peers');
+  if (worklife <= 2)     actions.push('🟡 Consider flexible working arrangements');
+  if (tenure < 2)        actions.push('🟡 Strengthen onboarding and 90-day check-ins');
+  if (actions.length === 0) actions.push('✅ No immediate red flags — maintain regular check-ins');
+
+  document.getElementById('actionList').innerHTML =
+    actions.map(a => `<div class="action-item">${a}</div>`).join('');
+}
+</script>
+</body>
+</html>
