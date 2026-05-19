@@ -4,7 +4,7 @@
 > with SHAP explainability, a $30.8M cost model, and an interactive
 > HTML dashboard. Built on the IBM HR Analytics dataset.
 
-![Dashboard Preview](outputs/attrition_dashboard_preview.png)
+
 
 ## Key results
 - **390 employees flagged at risk** — 26.5% of the workforce
